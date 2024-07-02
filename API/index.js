@@ -4,13 +4,17 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
-const cookieParser = require('cookie-parser')
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcrypt');
+const notifier = require('node-notifier');
+
 
 
 dotenv.config();
 mongoose.connect(process.env.MONGO_URL);
 
 const jwtSecret = process.env.SECRETKEY;
+const bcryptSalt = bcrypt.genSaltSync(10);
 console.log(process.env.MONGO_URL)
 const app = express();
 
@@ -43,11 +47,34 @@ app.get('/profile',(req,res)=>{
     res.status(401).json('Sorry No token exsist');
   }
 })
+
+app.post('/login',async (req,res)=>{
+   const {username,password} = req.body;
+   const foundUser = await User.findOne({username});
+   if(foundUser){
+    const passOK = bcrypt.compareSync(password,foundUser.password);
+    if(passOK){
+      jwt.sign({userid:foundUser._id,username},jwtSecret,{},(err,token) =>{
+         res.cookie('token',token).json({
+          id:foundUser._id,
+         });
+      })
+    };
+    }
+   }
+);
+
+
+
 app.post('/register', async (req, res) => {
   const { username, password } = req.body;
   // Ensure username and password are properly used here
   try {
-    const CreatedUser = await User.create({ username, password });
+    const hashedPass = bcrypt.hashSync(password,bcryptSalt);
+    const CreatedUser = await User.create(
+      { username:username, 
+        password: hashedPass
+      });
     jwt.sign({userid:CreatedUser._id,username},jwtSecret,{},(err,token) => {
       if(err) throw err;
       res.cookie('token',token).status(201).json({
